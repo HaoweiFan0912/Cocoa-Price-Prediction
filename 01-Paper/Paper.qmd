@@ -1,0 +1,16 @@
+---
+title: ""
+subtitle: ""
+author: 
+  - Haowei Fan
+thanks: "Code and data are available at: "
+date: today
+date-format: long
+abstract: ""
+format: pdf
+toc-depth: 2    
+number-sections: true
+toc: true           
+toc-title: "Table of Contents" 
+bibliography: references.bib
+---
