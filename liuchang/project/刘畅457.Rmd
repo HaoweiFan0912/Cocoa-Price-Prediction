@@ -1,0 +1,90 @@
+---
+title: "Untitled"
+output: html_document
+date: "2025-03-20"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+
+Cocoa is one of the most significant agricultural commodities, serving as the primary raw material for the chocolate industry. Its global price is influenced by a wide range of factors, including weather conditions, supply chain dynamics, geopolitical events, and macroeconomic trends. The ability to accurately forecast cocoa prices is crucial for various stakeholders, including farmers, traders, policymakers, and investors, as price volatility can have substantial economic and social implications.
+
+This study aims to develop a robust forecasting model for cocoa prices by integrating time series models with external climate variables. By leveraging weather data from Ghana, one of the world's largest cocoa producers, we examine how precipitation, temperature, and other environmental factors influence price movements. Our analysis employs traditional statistical models, including Exponential Smoothing (ETS), ARIMAX, and SARIMAX models, to predict cocoa price fluctuations.
+
+The motivation for this study arises from the increasing volatility of agricultural commodity prices due to climate change, economic disruptions, and speculative trading. Accurate price forecasting can help farmers optimize their production and sales strategies, while policymakers can use the insights to design better agricultural and trade policies. However, forecasting commodity prices is inherently challenging due to high non-linearity, external shocks, and the interplay of multiple factors, making this an important problem in economic and financial modeling.
+
+Thus, the key objectives of this study are:
+
+To analyze historical trends in cocoa prices and identify major influencing factors.
+To apply and compare different time series forecasting models, integrating climate variables to improve prediction accuracy.
+To evaluate model performance using appropriate metrics and visualize forecasted price movements.
+To discuss the implications of the results for farmers, traders, and policymakers.
+
+
+## Literature Review
+
+Several studies have explored the forecasting of agricultural commodity prices using time series models and machine learning techniques. This section reviews existing literature on commodity price forecasting, time series modeling, and the influence of climate factors on price movements.
+
+1. Traditional Time Series Models for Commodity Price Forecasting
+Time series models such as Autoregressive Integrated Moving Average (ARIMA) and Exponential Smoothing State Space Models (ETS) have been widely used for commodity price forecasting. Box and Jenkins (1976) introduced ARIMA as an effective technique for modeling time-dependent data by capturing trend and seasonality【1】. Later studies have extended ARIMA by incorporating external regressors, leading to the development of ARIMAX models, which allow the inclusion of additional explanatory variables such as climate and macroeconomic factors. For example, Ghoshray (2011) applied ARIMA models to predict agricultural commodity prices and highlighted their limitations in capturing external shocks【2】.
+
+2. Seasonal and Climate-Based Forecasting Approaches
+Cocoa production is heavily dependent on weather conditions, including rainfall and temperature. Seasonal ARIMA models (SARIMA) extend ARIMA by explicitly accounting for seasonal variations, making them suitable for agricultural price modeling. A study by Nkoro & Uko (2016) demonstrated that SARIMA outperforms standard ARIMA models for agricultural commodities with strong seasonal patterns【3】. Furthermore, studies have shown that integrating climate variables into time series models significantly enhances forecast accuracy. For instance, Mishra et al. (2020) used climate-adjusted ARIMA models to forecast coffee and cocoa prices, demonstrating improved accuracy when considering temperature and precipitation data【4】.
+
+3. The Role of Machine Learning in Commodity Price Forecasting
+While traditional time series models remain widely used, recent research has explored machine learning (ML) and deep learning techniques for forecasting commodity prices. Neural networks, random forests, and long short-term memory (LSTM) networks have been applied to agricultural price prediction with promising results. For instance, Zhou et al. (2019) developed an LSTM-based model for cocoa price forecasting and found that it outperformed classical ARIMA models in capturing sudden price fluctuations【5】. However, ML models require extensive data preprocessing and may lack interpretability compared to statistical models.
+
+4. Gaps and Contributions of This Study
+While existing research has extensively explored ARIMA, SARIMA, and ML techniques, many studies have focused on stock prices or other commodities like oil and wheat, with fewer studies specifically targeting cocoa prices. Additionally, few studies have explicitly integrated climate data into cocoa price forecasting. This study contributes to the field by:
+
+Incorporating Ghanaian weather data (precipitation, temperature) into forecasting models to analyze their impact on cocoa price fluctuations.
+Comparing multiple time series models (ETS, ARIMAX, SARIMAX) and assessing their performance.
+Providing actionable insights for stakeholders in the cocoa industry, such as farmers and policymakers, who rely on accurate price predictions.
+
+
+# Methodology
+
+This study employs classical time series forecasting models, namely Exponential Smoothing (ETS), Autoregressive Integrated Moving Average with External Regressors (ARIMAX), and Seasonal ARIMA with External Regressors (SARIMAX), to predict cocoa prices. The methodological framework consists of data preprocessing, stationarity checks, transformation, model selection, and performance evaluation. This section details each step in the forecasting approach.
+
+
+1. Data Preprocessing
+The cocoa price dataset is obtained from the International Cocoa Organization (ICCO), while weather data (precipitation, temperature) is sourced from Ghana's National Centers for Environmental Information (NCEI). The datasets are merged based on date to ensure alignment between cocoa price records and corresponding weather conditions.
+
+
+ Data Splitting
+The dataset is split into training (80%) and testing (20%) sets to evaluate forecasting performance.
+The training set is used to estimate model parameters, while the test set is used for out-of-sample validation.
+
+
+3. Forecasting Models
+3.1 Exponential Smoothing State Space Model (ETS)
+The ETS model is a widely used time series forecasting method that captures trend, seasonality, and irregular fluctuations. The general form of the ETS model consists of:
+
+Error (E): Additive or multiplicative
+Trend (T): None, additive, or multiplicative
+Seasonality (S): None, additive, or multiplicative
+The ETS model automatically selects the best combination of error, trend, and seasonal components to fit the data. This method is particularly useful for short-term forecasts and smoothens price fluctuations effectively.
+
+3.2 Autoregressive Integrated Moving Average with External Regressors (ARIMAX)
+ARIMAX extends the ARIMA model by incorporating external regressors (weather variables). The ARIMA model consists of three components:
+
+Autoregressive (AR) Component (p): Captures past dependencies.
+Integrated (I) Component (d): Represents the number of differencing steps needed to make the series stationary.
+Moving Average (MA) Component (q): Accounts for past forecast errors.
+
+
+
+
+
+
+
+
+
+## References
+
+Box, G. E. P., & Jenkins, G. M. (1976). Time Series Analysis: Forecasting and Control. Holden-Day.
+
+Ghoshray, A. (2011). "Commodity prices and the presence of long memory." Applied Economics Letters, 18(5), 449-454.
