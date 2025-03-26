@@ -14,3 +14,139 @@ toc: true
 toc-title: "Table of Contents" 
 bibliography: references.bib
 ---
+
+```{r, echo=FALSE, results='hide', message=FALSE, warning=FALSE}
+#### Workspace setup ####
+set.seed(912)
+# List of necessary packages
+packages <- c("tidyverse", "ggplot2", "knitr", "gridExtra")
+# Install missing packages
+missing_packages <- packages[!(packages %in% installed.packages()[, "Package"])]
+install.packages(missing_packages)
+# Load packages
+lapply(packages, library, character.only = TRUE)
+
+#### Read data ####
+prices <- read.csv(here::here("00-data/price.csv"))
+climate <- read.csv(here::here("00-data/climate.csv"))
+```
+
+
+# Introduction
+
+本项目旨在构建并评估一个用于预测可可（cocoa）价格的模型。作为一种关键的农产品，可可在全球食品产业链中扮演着重要角色，其价格波动不仅影响巧克力制造商的成本控制，也对主要可可生产国的经济稳定性产生深远影响。尤其是对加纳和科特迪瓦等以可可出口为主要外汇来源的发展中国家而言，准确预测可可价格对于财政预算编制、货币政策调控和农业补贴安排具有重要现实意义。
+
+本研究的动机源于可可价格在过去几十年中的剧烈波动对相关国家经济造成的重大影响。例如，1990年科特迪瓦可可危机中，政府将可可收购价砍半，导致农民收入骤降和社会服务支出减少；又如2016年加纳可可价格暴跌，引发银行业信贷紧缩与违约风险上升，严重冲击金融系统稳定。这些历史事件凸显了提前掌握价格走势的重要性。（！！需要文献！！）
+
+literacy review。。。。，本项目的不同之处。。。。
+
+本研究的大致方法是。。。。
+
+本研究的主要发现是。。。。
+
+本文的结构是。。。。
+
+NOTE: 文献在references。bib里面。
+
+
+# Methodology
+
+# Data
+```{r, echo=FALSE, results='hide', message=FALSE, warning=FALSE}
+# Convert date formats
+prices$Date <- as.Date(prices$Date, format='%d/%m/%Y')
+climate$DATE <- as.Date(climate$DATE)
+
+# Clean price data (remove commas and convert to numeric)
+prices$Price <- as.numeric(gsub(",", "", prices$ICCO.daily.price..US..tonne.))
+
+# Select and arrange data
+prices <- prices %>% select(Date, Price) %>% arrange(Date)
+
+# Aggregate weather data by date (mean values for daily observations)
+climate <- climate %>%
+  group_by(DATE) %>%
+  summarise(across(c(PRCP, TAVG, TMAX, TMIN), mean, na.rm = TRUE))
+
+# Merge cocoa prices with weather data
+cocoa_data <- left_join(prices, climate, by = c("Date" = "DATE"))
+cocoa_data <- na.omit(cocoa_data) # Remove missing values
+
+```
+
+
+```{r}
+#| warning: false
+#| message: false
+#| echo: false
+#| label: tbl-varibales
+#| tbl-cap: "Summary Statistics of Important Variables"
+
+tbl_data <- cocoa_data
+colnames(tbl_data) <- c("Date", "Price", "Daily Perception", 
+                          "Average Temperature", 
+                          "Maximum Temperature", 
+                          "Minimum Temperature")
+
+knitr::kable(summary(tbl_data))
+```
+
+
+```{r, fig.pos="H"}
+#| warning: false
+#| message: false
+#| echo: false
+#| label: fig-series
+#| fig-cap: "Time Series of Cocoa Price, Local Average Temperature, and Precipitation"
+
+plot_price <- ggplot(cocoa_data, aes(x = Date, y = Price)) +
+  geom_line(color = "blue") +
+  labs(title = "Cocoa Price Over Time",
+       x = "Date", 
+       y = "Cocoa Price in USD") +
+  theme_minimal() +
+  theme(plot.title = element_text(size = 8),
+  axis.title = element_text(size = 8))
+
+plot_temp <- ggplot(cocoa_data, aes(x = Date, y = TAVG)) +
+  geom_line(color = "red") +
+  labs(title = "Daily Average Temperature Over Time",
+       x = "Date", 
+       y = "Temperature in °C") +
+  theme_minimal() +
+  theme(plot.title = element_text(size = 8),
+  axis.title = element_text(size = 8))
+
+plot_prcp <- ggplot(cocoa_data, aes(x = Date, y = PRCP)) +
+  geom_line(color = "darkgreen") +
+  labs(title ="Daily Precipitation Over Time",
+       x = "Date", 
+       y = "Precipitation in mm") +
+  theme_minimal() +
+  theme(plot.title = element_text(size = 8),
+  axis.title = element_text(size = 8))
+
+grid.arrange(
+  plot_price,
+  arrangeGrob(plot_temp, plot_prcp, ncol = 2),
+  nrow = 2
+)
+```
+
+```{r, fig.pos="H", fig.width=8,fig.height=5}
+#| warning: false
+#| message: false
+#| echo: false
+#| label: fig-pricedecom
+#| fig-cap: "Decompose of Series of Prices"
+
+price_ts <- ts(cocoa_data$Price, start = c(year(min(cocoa_data$Date)), month(min(cocoa_data$Date))), frequency = 365)
+decomp <- stl(price_ts, s.window = "periodic")
+
+plot(decomp)
+```
+
+
+
+
+
