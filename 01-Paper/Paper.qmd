@@ -19,7 +19,7 @@ bibliography: references.bib
 #### Workspace setup ####
 set.seed(912)
 # List of necessary packages
-packages <- c("tidyverse", "ggplot2", "knitr", "gridExtra")
+packages <- c("tidyverse", "ggplot2", "knitr", "gridExtra", "tidyverse", "lubridate", "forecast", "tseries", "ggplot2", "xgboost", "caret", "slider", "rugarch")
 # Install missing packages
 missing_packages <- packages[!(packages %in% installed.packages()[, "Package"])]
 install.packages(missing_packages)
@@ -51,8 +51,82 @@ NOTE: 文献在references。bib里面。
 
 # Methodology
 
+###注意，我在此部分写的代码，是为了方便分析，后面全部要删掉。但是后面部分的兄弟可以进行参考###
+
+首先，我们通过previous study确认了几个对于cocoa价格非常重要的几个因素。并且将数据整理成了以月为单位而不是天，每个月的数据是由那个月的平均计算得出。
+```{r}
+### Load and Aggregate Cocoa Price Data to Monthly
+prices <- read.csv(here::here("00-data/price.csv"))
+prices$Date <- as.Date(prices$Date, format='%d/%m/%Y')
+prices$Price <- as.numeric(gsub(",", "", prices$ICCO.daily.price..US..tonne.))
+prices <- prices %>%
+  mutate(YearMonth = floor_date(Date, "month")) %>%
+  group_by(YearMonth) %>%
+  summarise(Price = mean(Price, na.rm = TRUE)) %>%
+  ungroup()
+
+### Load and Aggregate Ghana Weather Data to Monthly
+climate <- read.csv(here::here("00-data/climate.csv"))
+climate$DATE <- as.Date(climate$DATE)
+climate <- climate %>%
+  mutate(YearMonth = floor_date(DATE, "month")) %>%
+  group_by(YearMonth) %>%
+  summarise(across(c(PRCP, TAVG, TMAX, TMIN), mean, na.rm = TRUE))
+
+### Merge and Clean Monthly Data
+cocoa_data <- left_join(prices, climate, by = "YearMonth")
+```
+
+```{r}
+### Plot Monthly Time Series
+ggplot(cocoa_data, aes(x = YearMonth)) +
+  geom_line(aes(y = Price), color = "steelblue") +
+  labs(title = "Monthly Cocoa Prices", y = "Price", x = "Date") +
+  theme_minimal()
+```
+
+随后我们给response variable 也就是price 取了一个log，并且做了difference，直到看起来是stationary的。
+```{r}
+cocoa_data <- cocoa_data %>%
+  mutate(log_price = log(Price)) %>%
+  drop_na()
+### Plot Monthly Time Series
+ggplot(cocoa_data, aes(x = YearMonth)) +
+  geom_line(aes(y = log_price), color = "steelblue") +
+  labs(title = "Monthly Cocoa Prices", y = "log_price", x = "Date") +
+  theme_minimal()
+```
+```{r}
+### Merge and Clean Monthly Data
+cocoa_data <- cocoa_data %>%
+  mutate(diff_log_price = c(NA, diff(log_price))) %>%
+  drop_na()
+### Plot Monthly Time Series
+ggplot(cocoa_data, aes(x = YearMonth)) +
+  geom_line(aes(y = diff_log_price), color = "steelblue") +
+  labs(title = "Monthly Cocoa Prices", y = "diff_log_price", x = "Date") +
+  theme_minimal()
+```
+然后我们数据分成了7:3，其中7成是训练，3成是测试。
+
+我们用训练数据训练了以下的备选模型：ETS，ARIMA，SARIMA，Linear Regression Model，ARCH/GARCH。
+
+模型训练好了以后，我们用测试集测试这些模型的好坏，并且将做了transform的模型，transform predictions back to origin （比如说，做了log，我们就给预测值做一个exponential）
+
+我们通过对比图像以及sum square of erro, AIC，BIC。。。。来对比这些模型。最后选出最好的模型。
+
+
+
+
+
+
+
+
+
 # Data
 ```{r, echo=FALSE, results='hide', message=FALSE, warning=FALSE}
+prices <- read.csv(here::here("00-data/price.csv"))
+climate <- read.csv(here::here("00-data/climate.csv"))
 # Convert date formats
 prices$Date <- as.Date(prices$Date, format='%d/%m/%Y')
 climate$DATE <- as.Date(climate$DATE)
