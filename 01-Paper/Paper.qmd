@@ -31,24 +31,18 @@ prices <- read.csv(here::here("00-data/price.csv"))
 climate <- read.csv(here::here("00-data/climate.csv"))
 ```
 
+# Abstract
+
+This paper forecasts monthly cocoa prices using data from the International Cocoa Organization and climate records from Ghana. After standardized the data, a series of time series models were applied to forecast the prices, including Exponential Smoothing (ETS), ARIMA, SARIMA, linear regression with climate covariates, and GARCH models. 【结果what was found, and why this matters】
 
 # Introduction
+Forecasting commodity prices is a challenge in economics and statistical modelling because of the multi-factorial drivers of price behaviour. However, forecasting commodity prices is important for producers, traders and policymakers to have more understanding about the market. Cocoa is a globally traded commodity with significant economic relevance, particularly in regions where it is both produced and consumed at scale such as Ghana. For stakeholders such as producers, traders, and policymakers, accurate forecasting is vital to design procurement strategies, manage supply chain risks, and stabilize income. 
 
-本项目旨在构建并评估一个用于预测可可（cocoa）价格的模型。作为一种关键的农产品，可可在全球食品产业链中扮演着重要角色，其价格波动不仅影响巧克力制造商的成本控制，也对主要可可生产国的经济稳定性产生深远影响。尤其是对加纳和科特迪瓦等以可可出口为主要外汇来源的发展中国家而言，准确预测可可价格对于财政预算编制、货币政策调控和农业补贴安排具有重要现实意义。
+Some real-world examples also shows the importance of forecasting the Cocoa price. In 2016–2017, global cocoa prices declined by over 30% [@icco2016november], leading to significant income losses for smallholder farmers in Ghana. However, cocoa exports constitute a major share of national revenue in Chana. This forced some farmers to abandon cocoa cultivation or turn to alternative livelihoods, including environmentally damaging activities such as illegal mining [@bryant2021political]. In order to stabilize the price of cocoa, Ghana and Côte d’Ivoire jointly introduced the Living Income Differential (LID) in 2019, establishing a $400-per-ton premium on cocoa exports to support farmer incomes [@jrc2021lid]. This real-world example shows how price instability can widely influence the economic and social consequences, and highlights the importance of forecasting models.
 
-本研究的动机源于可可价格在过去几十年中的剧烈波动对相关国家经济造成的重大影响。例如，1990年科特迪瓦可可危机中，政府将可可收购价砍半，导致农民收入骤降和社会服务支出减少；又如2016年加纳可可价格暴跌，引发银行业信贷紧缩与违约风险上升，严重冲击金融系统稳定。这些历史事件凸显了提前掌握价格走势的重要性。（！！需要文献！！）
+This paper aims to develop an accurate model for predicting cocoa prices. The paper investigates the monthly behaviour of cocoa prices by using two key datasets, including daily cocoa futures prices from the International Cocoa Organization and daily 	climate data from Ghana, the largest cocoa-producing country in the world. The analysis focuses on modelling the monthly change in log-transformed cocoa prices. The differencing method was use to address non-stationarity. A series of forecasting models was evaluated, including Exponential Smoothing (ETS), ARIMA, SARIMA, linear regression with climate covariates, and GARCH models. Each model was trained on a 70% subsample and assessed using the remaining 30% sample, which is a 70/30 train-test split. Forecast accuracy was assessed with root mean square error (RMSE), AIC, and BIC, with all predictions back-transformed to the original price scale.
 
-literacy review。。。。，本项目的不同之处。。。。
-
-本研究的大致方法是。。。。
-
-本研究的主要发现是。。。。
-
-本文的结构是。。。。
-
-一个自然段提到我们用到的tools，并cite。
-
-NOTE: 文献在references。bib里面。
+结果和为什么重要
 
 
 # Methodology
