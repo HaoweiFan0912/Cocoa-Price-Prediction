@@ -36,20 +36,33 @@ climate <- read.csv(here::here("00-data/climate.csv"))
 This paper forecasts monthly cocoa prices using data from the International Cocoa Organization and climate records from Ghana. After standardized the data, a series of time series models were applied to forecast the prices, including Exponential Smoothing (ETS), ARIMA, SARIMA, linear regression with climate covariates, and GARCH models. 【结果what was found, and why this matters】
 
 # Introduction
-Forecasting commodity prices is a challenge in economics and statistical modelling because of the multi-factorial drivers of price behaviour. However, forecasting commodity prices is important for producers, traders and policymakers to have more understanding about the market. Cocoa is a globally traded commodity with significant economic relevance, particularly in regions where it is both produced and consumed at scale such as Ghana. For stakeholders such as producers, traders, and policymakers, accurate forecasting is vital to design procurement strategies, manage supply chain risks, and stabilize income. 
 
-Some real-world examples also shows the importance of forecasting the Cocoa price. In 2016–2017, global cocoa prices declined by over 30% [@icco2016november], leading to significant income losses for smallholder farmers in Ghana. However, cocoa exports constitute a major share of national revenue in Chana. This forced some farmers to abandon cocoa cultivation or turn to alternative livelihoods, including environmentally damaging activities such as illegal mining [@bryant2021political]. In order to stabilize the price of cocoa, Ghana and Côte d’Ivoire jointly introduced the Living Income Differential (LID) in 2019, establishing a $400-per-ton premium on cocoa exports to support farmer incomes [@jrc2021lid]. This real-world example shows how price instability can widely influence the economic and social consequences, and highlights the importance of forecasting models.
+Forecasting commodity prices is a challenge in economics and statistical modelling because of the multi-factorial drivers of price behaviour. However, forecasting commodity prices is important for producers, traders and policymakers to have more understanding about the market. Cocoa is a globally traded commodity with significant economic relevance, particularly in regions where it is both produced and consumed at scale such as Ghana. For stakeholders such as producers, traders, and policymakers, accurate forecasting is vital to design procurement strategies, manage supply chain risks, and stabilize income.
 
-This paper aims to develop an accurate model for predicting cocoa prices. The paper investigates the monthly behaviour of cocoa prices by using two key datasets, including daily cocoa futures prices from the International Cocoa Organization and daily 	climate data from Ghana, the largest cocoa-producing country in the world. The analysis focuses on modelling the monthly change in log-transformed cocoa prices. The differencing method was use to address non-stationarity. A series of forecasting models was evaluated, including Exponential Smoothing (ETS), ARIMA, SARIMA, linear regression with climate covariates, and GARCH models. Each model was trained on a 70% subsample and assessed using the remaining 30% sample, which is a 70/30 train-test split. Forecast accuracy was assessed with root mean square error (RMSE), AIC, and BIC, with all predictions back-transformed to the original price scale.
+Some real-world examples also show the importance of forecasting the Cocoa price. In 2016–2017, global cocoa prices declined by over 30% [@icco2016november], leading to significant income losses for smallholder farmers in Ghana. However, cocoa exports constitute a major share of national revenue in Chana. This forced some farmers to abandon cocoa cultivation or turn to alternative livelihoods, including environmentally damaging activities such as illegal mining [@bryant2021political]. In order to stabilize the price of cocoa, Ghana and Côte d’Ivoire jointly introduced the Living Income Differential (LID) in 2019, establishing a $400-per-ton premium on cocoa exports to support farmer incomes [@jrc2021lid]. This real-world example shows how price instability can widely influence the economic and social consequences, and highlights the importance of forecasting models.
+
+This paper aims to develop an accurate model for predicting cocoa prices. The paper investigates the monthly behaviour of cocoa prices by using two key datasets, including daily cocoa futures prices from the International Cocoa Organization and daily climate data from Ghana, the largest cocoa-producing country in the world. The analysis focuses on modelling the monthly change in log-transformed cocoa prices. The differencing method was use to address non-stationarity. A series of forecasting models was evaluated, including Exponential Smoothing (ETS), ARIMA, SARIMA, linear regression with climate covariates, and GARCH models. Each model was trained on a 70% subsample and assessed using the remaining 30% sample, which is a 70/30 train-test split. Forecast accuracy was assessed with root mean square error (RMSE), AIC, and BIC, with all predictions back-transformed to the original price scale.
 
 结果和为什么重要
 
+# Literature Review
+
+Time series forecasting has become a widely used approach in modeling agricultural commodity prices due to its ability to capture time dependencies and market volatility. @bestmodelcoffee compared different forecasting techniques for coffee prices, including Moving Average (MA), ARIMA, and decomposition methods. Their findings showed that ARIMA has reliable performance across both international and domestic markets. This shows that ARIMA may be a suitable model for this paper.
+
+Building upon Novanda's research, @coffee1 conducted a advanced comparative analysis and emphasized data preprocessing in the research. They identified and removed nonstationary components such as seasonality and trend first and then use the Partial Autocorrelation Function (PACF) to make lag selection. They compared several forecasting techniques, including Exponential Smoothing (ES), Autoregressive (AR), ARIMA, Multilayer Perceptron (MLP), and Extreme Learning Machines (ELM), to find the most accurate prediction model. This study offers insights into model selection strategies for time series forecasting. Our study also emphasis the importance on preprocessing and model comparison.
+
+@spices further demonstrated that combines ARIMA with artificial neural networks can have better forecasting performance when dealing with nonlinear patterns and volatility clustering in agricultural export prices. Motivated by these findings, our paper applies a hybrid ARIMA-GARCH model to capture both the trend and volatility structure in cocoa price.
+
+Finally, @cocoa investigated the impact of world cocoa prices on cocoa production in Ghana using a regression model with ARIMA errors. While both their study and ours are about Ghanaian cocoa, the focus are different. @cocoa emphasized the effect of international prices on production, while our analysis aims to forecast cocoa prices with climate variables as potential predictors.
+
+In summary, previous studies provided valuable insights into the strengths and limitations of various time series and hybrid models in price forecasting. With these insights, models including ARIMA, SARIMA, ETS, and GARCH were applied to forecast the cocoa prices.
 
 # Methodology
 
 ###注意，我在此部分写的代码，是为了方便分析，后面全部要删掉。但是后面部分的兄弟可以进行参考###
 
 首先，我们通过previous study确认了几个对于cocoa价格非常重要的几个因素。并且将数据整理成了以月为单位而不是天，每个月的数据是由那个月的平均计算得出。
+
 ```{r}
 ### Load and Aggregate Cocoa Price Data to Monthly
 prices <- read.csv(here::here("00-data/price.csv"))
@@ -73,6 +86,7 @@ climate <- climate %>%
 cocoa_data <- left_join(prices, climate, by = "YearMonth")
 ```
 
+
 ```{r}
 ### Plot Monthly Time Series
 ggplot(cocoa_data, aes(x = YearMonth)) +
@@ -82,6 +96,7 @@ ggplot(cocoa_data, aes(x = YearMonth)) +
 ```
 
 随后我们给response variable 也就是price 取了一个log，并且做了difference，直到看起来是stationary的。
+
 ```{r}
 cocoa_data <- cocoa_data %>%
   mutate(log_price = log(Price)) %>%
@@ -92,6 +107,7 @@ ggplot(cocoa_data, aes(x = YearMonth)) +
   labs(title = "Monthly Cocoa Prices", y = "log_price", x = "Date") +
   theme_minimal()
 ```
+
 ```{r}
 ### Merge and Clean Monthly Data
 cocoa_data <- cocoa_data %>%
@@ -103,6 +119,7 @@ ggplot(cocoa_data, aes(x = YearMonth)) +
   labs(title = "Monthly Cocoa Prices", y = "diff_log_price", x = "Date") +
   theme_minimal()
 ```
+
 然后我们数据分成了7:3，其中7成是训练，3成是测试。
 
 我们用训练数据训练了以下的备选模型：ETS，ARIMA，SARIMA，Linear Regression Model，ARCH/GARCH。
@@ -111,15 +128,12 @@ ggplot(cocoa_data, aes(x = YearMonth)) +
 
 我们通过对比图像以及sum square of erro, AIC，BIC。。。。来对比这些模型。最后选出最好的模型。
 
-
-
-
-
-
-
-
-
 # Data
+
+This study uses two sources of data: international cocoa price data from the International Cocoa Organization (ICCO) and local climate data from Ghana. The ICCO dataset provides daily cocoa futures prices (in USD per tonne), while the climate dataset includes daily measurements of precipitation and temperature from a major cocoa-producing region in Ghana. The observation is from October 1994 to November 2024, which allows both long-term trends and short-term seasonal effects analysis.
+
+To prepare the data for time series analysis, several preprocessing steps were undertaken. After importing the dataset, prices were converted to numeric values and date formats were standardized. The climate data for each day was the average of existed multiple observations of that day. The two datasets were merged by date and the data was summarized on a monthly basis. The dependent variable, *Price*, represents the monthly average of daily cocoa prices.
+
 ```{r, echo=FALSE, results='hide', message=FALSE, warning=FALSE}
 prices <- read.csv(here::here("00-data/price.csv"))
 climate <- read.csv(here::here("00-data/climate.csv"))
@@ -143,8 +157,7 @@ cocoa_data <- left_join(prices, climate, by = c("Date" = "DATE"))
 cocoa_data <- na.omit(cocoa_data) # Remove missing values
 
 ```
-
-
+@tbl-varibales presents the summary statistics for the variables used in this study, including cocoa prices and daily climate indicators from 1994 to 2024. The cocoa price (USD) range from a minimum of 778.4 to a maximum of 10,690.7, with a median value of 2,330.7, which indicates significant variability over time. Daily Perception values are mostly zero with 75% of the data at or below 0.3, but the maximum is 10.28. Temperature data shows relative stability. The average of daily maximum temperature is 88.4°F and mean of minimum is 73.8°F. Overall, the dataset shows greater fluctuations in Price and Daily Perception compared to the more stable temperature records.
 ```{r}
 #| warning: false
 #| message: false
@@ -160,7 +173,7 @@ colnames(tbl_data) <- c("Date", "Price", "Daily Perception",
 
 knitr::kable(summary(tbl_data))
 ```
-
+In @fig-series, the top panel shows the trend of cocoa prices over time (in USD per tonne). From 1994 to around 2015, prices fluctuated modestly between USD 1500 and USD 3500. However, prices increase dramatically in recent years, which justifies the use of volatility-sensitive models such as GARCH. The left bottom temperature graph shows a seasonal cycle, fluctuating between roughly 76°C and 88°C, without strong long-term trend. The bottom-right graph presents daily precipitation levels. The majority of observations are close to zero, but there are some extreme outliers. This indicates there are some heavy rainfall days existing. 
 
 ```{r, fig.pos="H"}
 #| warning: false
@@ -182,7 +195,7 @@ plot_temp <- ggplot(cocoa_data, aes(x = Date, y = TAVG)) +
   geom_line(color = "red") +
   labs(title = "Daily Average Temperature Over Time",
        x = "Date", 
-       y = "Temperature in °C") +
+       y = "Temperature in °F") +
   theme_minimal() +
   theme(plot.title = element_text(size = 8),
   axis.title = element_text(size = 8))
@@ -202,6 +215,7 @@ grid.arrange(
   nrow = 2
 )
 ```
+@fig-pricedecom presents the STL (Seasonal-Trend-Loess) decomposition of the cocoa price time series. The seasonal component captures strong seasonal components, showing yearly cycles likely related to cocoa harvesting seasons or international price trends. The trend component indicates an significant increase in prices starting around 2001. The remainder component highlights short-term fluctuations and irregularities not captured by the trend or seasonality.
 
 ```{r, fig.pos="H", fig.width=8,fig.height=5}
 #| warning: false
@@ -215,8 +229,7 @@ decomp <- stl(price_ts, s.window = "periodic")
 
 plot(decomp)
 ```
-
-
+In summary, the datasets capture both economic and environmental determinants affecting cocoa pricing at a monthly base. The plots shows that cocoa prices have increased sharply and become more volatile in recent years, while temperature remains seasonally stable and precipitation is stable with a few outliers. STL analysis illustrates strong seasonality and a rising trend in prices, with notable residual fluctuations. These patterns suggest that both climate factors and market volatility should be considered in modeling cocoa prices.
 
 
 
