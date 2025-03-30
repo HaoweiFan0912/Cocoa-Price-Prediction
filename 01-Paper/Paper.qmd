@@ -59,74 +59,21 @@ In summary, previous studies provided valuable insights into the strengths and l
 
 # Methodology
 
-###注意，我在此部分写的代码，是为了方便分析，后面全部要删掉。但是后面部分的兄弟可以进行参考###
+At the initial stage of this study, we primarily considered time series models to forecast trends in cocoa prices. The models employed included the ETS (Error, Trend, Seasonal) model, the ARIMA (AutoRegressive Integrated Moving Average) model, and the SARIMA (Seasonal ARIMA) model. During the training of these models, only historical cocoa price data were used.
 
-首先，我们通过previous study确认了几个对于cocoa价格非常重要的几个因素。并且将数据整理成了以月为单位而不是天，每个月的数据是由那个月的平均计算得出。
+Prior to model fitting, we conducted preprocessing on the raw data by aggregating the daily price data into monthly frequency. The representative value for each month was calculated as the average of all available daily prices in that month, ignoring any missing values during the calculation. This step was intended to reduce data noise and ease computational burden. We then split the data into a training set and a testing set in a 7:3 ratio.
 
-```{r}
-### Load and Aggregate Cocoa Price Data to Monthly
-prices <- read.csv(here::here("00-data/price.csv"))
-prices$Date <- as.Date(prices$Date, format='%d/%m/%Y')
-prices$Price <- as.numeric(gsub(",", "", prices$ICCO.daily.price..US..tonne.))
-prices <- prices %>%
-  mutate(YearMonth = floor_date(Date, "month")) %>%
-  group_by(YearMonth) %>%
-  summarise(Price = mean(Price, na.rm = TRUE)) %>%
-  ungroup()
+For the ETS model, we built the model directly on the raw price data. Through initial visual analysis, we examined the data's trend, seasonality, and error volatility to determine the structure (additive or multiplicative) of the three ETS components. For uncertain configurations, we applied automatic model fitting and compared multiple candidate models. The model with the lowest corrected Akaike Information Criterion (AICc) was selected as the final ETS model.
 
-### Load and Aggregate Ghana Weather Data to Monthly
-climate <- read.csv(here::here("00-data/climate.csv"))
-climate$DATE <- as.Date(climate$DATE)
-climate <- climate %>%
-  mutate(YearMonth = floor_date(DATE, "month")) %>%
-  group_by(YearMonth) %>%
-  summarise(across(c(PRCP, TAVG, TMAX, TMIN), mean, na.rm = TRUE))
+Before fitting the ARIMA and SARIMA models, we first transformed the price data to achieve stationarity by applying logarithmic transformation and differencing. We then examined the autocorrelation function (ACF) and partial autocorrelation function (PACF) plots to preliminarily identify the orders of the models (p, d, q) and seasonal components (P, D, Q, s). When the cutoffs were unclear, we employed a grid search over different parameter combinations and selected the optimal model based on the lowest AICc value.
 
-### Merge and Clean Monthly Data
-cocoa_data <- left_join(prices, climate, by = "YearMonth")
-```
+Once the ARIMA and SARIMA models were obtained, we conducted diagnostic analysis on their residuals, with a particular focus on autocorrelation. If the ACF plots of the residuals showed significant autocorrelation, it indicated that the model failed to capture all underlying volatility structures. In such cases, we further applied the GARCH (Generalized Autoregressive Conditional Heteroskedasticity) model to account for heteroskedasticity in the residuals and improve forecasting performance.
 
+In addition to time series models, we also developed a multiple linear regression model to incorporate external explanatory variables identified in our literature review, such as climate change. The training data for this model also consisted of the first 70% of the full dataset. Since linear regression models cannot inherently capture temporal dependencies among variables, we introduced several lagged variables to improve the model's ability to reflect dynamic changes over time. As a result, observations with missing lagged values were removed from the dataset.
 
-```{r}
-### Plot Monthly Time Series
-ggplot(cocoa_data, aes(x = YearMonth)) +
-  geom_line(aes(y = Price), color = "steelblue") +
-  labs(title = "Monthly Cocoa Prices", y = "Price", x = "Date") +
-  theme_minimal()
-```
+After fitting the models, we conducted a systematic evaluation of all candidate models (ETS, ARIMA, SARIMA, GARCH, and linear regression). First, we used AICc as one of the main criteria for model selection to compare their in-sample fitting performance. Then, we performed residual diagnostics on the training set, including residual plots, ACF and PACF plots, and the Ljung-Box test to examine whether the residuals resembled white noise. For the linear regression model, we further tested residual normality and assessed multicollinearity using metrics such as the Variance Inflation Factor (VIF) to evaluate the model’s robustness and explanatory power.
 
-随后我们给response variable 也就是price 取了一个log，并且做了difference，直到看起来是stationary的。
-
-```{r}
-cocoa_data <- cocoa_data %>%
-  mutate(log_price = log(Price)) %>%
-  drop_na()
-### Plot Monthly Time Series
-ggplot(cocoa_data, aes(x = YearMonth)) +
-  geom_line(aes(y = log_price), color = "steelblue") +
-  labs(title = "Monthly Cocoa Prices", y = "log_price", x = "Date") +
-  theme_minimal()
-```
-
-```{r}
-### Merge and Clean Monthly Data
-cocoa_data <- cocoa_data %>%
-  mutate(diff_log_price = c(NA, diff(log_price))) %>%
-  drop_na()
-### Plot Monthly Time Series
-ggplot(cocoa_data, aes(x = YearMonth)) +
-  geom_line(aes(y = diff_log_price), color = "steelblue") +
-  labs(title = "Monthly Cocoa Prices", y = "diff_log_price", x = "Date") +
-  theme_minimal()
-```
-
-然后我们数据分成了7:3，其中7成是训练，3成是测试。
-
-我们用训练数据训练了以下的备选模型：ETS，ARIMA，SARIMA，Linear Regression Model，ARCH/GARCH。
-
-模型训练好了以后，我们用测试集测试这些模型的好坏，并且将做了transform的模型，transform predictions back to origin （比如说，做了log，我们就给预测值做一个exponential）
-
-我们通过对比图像以及sum square of erro, AIC，BIC。。。。来对比这些模型。最后选出最好的模型。
+Following model validation on the training set, we evaluated the out-of-sample forecasting performance of each model using the testing set. Based on the parameters estimated from the training data, we generated forecasts for the testing set and calculated multiple forecast error metrics, including Mean Absolute Error (MAE), Root Mean Squared Error (RMSE), Mean Absolute Percentage Error (MAPE), and Sum of Squared Errors (SSE). By comparing these evaluation results, we assessed the generalization capability and predictive stability of each model, and ultimately selected the best-performing model as the final forecasting model in this study.
 
 # Data
 
@@ -231,5 +178,7 @@ plot(decomp)
 ```
 In summary, the datasets capture both economic and environmental determinants affecting cocoa pricing at a monthly base. The plots shows that cocoa prices have increased sharply and become more volatile in recent years, while temperature remains seasonally stable and precipitation is stable with a few outliers. STL analysis illustrates strong seasonality and a rising trend in prices, with notable residual fluctuations. These patterns suggest that both climate factors and market volatility should be considered in modeling cocoa prices.
 
+\newpage
 
+# References
 
