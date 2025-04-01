@@ -1,0 +1,248 @@
+---
+title: "STA457 Final Project"
+author: "Wenyi Li"
+date: "2025-03-30"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r}
+# load required libraries
+library(tidyverse)
+library(lubridate)
+library(forecast)
+library(tseries)
+library(ggplot2)
+library(xgboost)
+library(caret)
+library(slider)
+library(rugarch)
+```
+
+# Data Preprocessing
+```{r}
+# load and preprocess price data
+cocoa_prices <- read.csv("Daily Prices_ICCO.csv", stringsAsFactors = FALSE)
+cocoa_prices$Date <- as.Date(cocoa_prices$Date, format='%d/%m/%Y')
+cocoa_prices$Price <- as.numeric(gsub(",", "", cocoa_prices$ICCO.daily.price..US..tonne.))
+cocoa_prices <- cocoa_prices %>%
+  mutate(YearMonth = floor_date(Date, "month")) %>%
+  group_by(YearMonth) %>%
+  summarise(Price = mean(Price, na.rm = TRUE)) %>%
+  ungroup()
+```
+
+```{r}
+# load and preprocess Ghana weather data
+ghana_weather <- read.csv("Ghana_data.csv", stringsAsFactors = FALSE)
+ghana_weather$DATE <- as.Date(ghana_weather$DATE)
+ghana_weather <- ghana_weather %>%
+  mutate(YearMonth = floor_date(DATE, "month")) %>%
+  group_by(YearMonth) %>%
+  summarise(across(c(PRCP, TAVG, TMAX, TMIN), mean, na.rm = TRUE))
+```
+
+```{r}
+# Merge and Clean Monthly Data(log + diff)
+cocoa_data <- left_join(cocoa_prices, ghana_weather, by = "YearMonth") %>%
+  mutate(log_price = log(Price),
+         diff_log_price = c(NA, diff(log_price))) %>%
+  drop_na()
+
+# Plot Monthly Time Series
+ggplot(cocoa_data, aes(x = YearMonth)) +
+  geom_line(aes(y = Price), color = "steelblue") +
+  labs(title = "Monthly Cocoa Prices", y = "Price", x = "Date") +
+  theme_minimal()
+```
+
+```{r}
+# Split Data into Training and Testing Sets(7:3 ratio)
+train_size <- floor(0.7 * nrow(cocoa_data))
+train_data <- cocoa_data[1:train_size, ]
+test_data <- cocoa_data[(train_size + 1):nrow(cocoa_data), ]
+```
+
+
+
+# Modeling
+```{r}
+# since not station, already transformed in the pre-processed part(log + diff)
+# built ets models
+ets_model_1 <- ets(train_data$diff_log_price, model = "ZZZ")
+ets_model_2 <- ets(train_data$diff_log_price)
+# ets_model_2(ets_model_1) was selected as a candidate
+```
+
+```{r}
+# built arima, sarima models
+# verify stationarity(1st diff + log)
+ggplot(train_data, aes(x = YearMonth)) +
+  geom_line(aes(y = diff_log_price), color = "steelblue") +
+  labs(title = "Monthly Cocoa Prices", y = "Price", x = "Date") +
+  theme_minimal()
+acf(train_data$diff_log_price, main = "ACF of differencing log price")
+pacf(train_data$diff_log_price, main = "PACF of differencing log price")
+external_regressors <- data.matrix(train_data[, c("PRCP", "TAVG", "TMAX", "TMIN")])
+arima_model1 <- arima(train_data$diff_log_price, order = c(2,0,2), xreg = external_regressors)
+arima_model2 <- arima(train_data$diff_log_price, order = c(2,0,5), xreg = external_regressors)
+sarimax_model <- auto.arima(train_data$diff_log_price, xreg = as.matrix(external_regressors), seasonal = TRUE)
+summary(arima_model1)
+summary(arima_model2)
+# arima_model1, sarimax_model was selected as a candidate, seasonality not detected(sarimaxmodel same as arimamodel1)
+```
+
+```{r}
+# residual diagnostic for arima, sarima models
+tsdiag(arima_model1, gof.lag = 20)
+tsdiag(arima_model2, gof.lag = 20)
+tsdiag(sarimax_model, gof.lag = 20)
+```
+
+```{r}
+# forecasting in diff-log base
+test_xreg <- data.matrix(test_data[, c("PRCP", "TAVG", "TMAX", "TMIN")])
+test_xreg <- as.matrix(test_xreg)
+ets_forecast_2 <- forecast(ets_model_2, h = nrow(test_data))
+sarimax_forecast <- forecast(sarimax_model, xreg = test_xreg, h = nrow(test_data))
+pred1 <- predict(arima_model1, n.ahead = h, newxreg = test_xreg)
+# acc comparison
+ets_accuracy_2 <- accuracy(ets_forecast_2, test_data$diff_log_price)
+arima1_forecast_vals <- pred1$pred
+arima1_accuracy <- accuracy(arima1_forecast_vals, test_data$diff_log_price)
+sarimax_accuracy <- accuracy(sarimax_forecast, test_data$diff_log_price)
+print("ETS Model Performance:")
+print(ets_accuracy_2)
+print("ARIMAX Model Performance:")
+print(arima1_accuracy)
+print("SARIMAX Model Performance:")
+print(sarimax_accuracy)
+```
+```{r}
+# back-transform forecasted values
+reconstruct_log_prices <- function(last_log_price, diffs) {cumsum(c(last_log_price, diffs))[-1]}
+
+last_log_price <- tail(train_data$log_price, 1)
+n <- nrow(test_data)
+forecast_dates <- test_data$YearMonth
+
+ets2_log_forecast <- reconstruct_log_prices(last_log_price, ets_forecast_2$mean)
+sarimax_log_forecast <- reconstruct_log_prices(last_log_price, sarimax_forecast$mean)
+arima_log_forecast <- reconstruct_log_prices(last_log_price, pred1$pred)
+
+ets2_price_forecast <- exp(ets2_log_forecast)
+ets2_price_forecast
+sarimax_price_forecast <- exp(sarimax_log_forecast)
+sarimax_price_forecast
+arima_price_forecast <- exp(arima_log_forecast)
+arima_price_forecast
+
+forecast_df <- bind_rows(
+  tibble(Date = forecast_dates, Forecast = ets2_price_forecast, Model = "ETS Model 2"),
+  tibble(Date = forecast_dates, Forecast = sarimax_price_forecast, Model = "SARIMAX"),
+  tibble(Date = forecast_dates, Forecast = arima_price_forecast, Model = "ARIMA")
+) %>% drop_na()
+
+forecast_df
+#forecast_df is a knitted back-transformed forecasted values for three models
+
+ggplot() +
+  geom_line(data = cocoa_data, aes(x = YearMonth, y = Price), color = "black", linewidth = 1.3) +
+  geom_line(data = forecast_df, aes(x = Date, y = Forecast, color = Model, linetype = Model), linewidth = 1.3) +
+  labs(title = "Monthly Forecasts vs Actual Cocoa Prices", y = "Price", x = "Date") +
+  theme_minimal() +
+  theme(legend.position = "bottom") +
+  scale_color_manual(values = c(
+    "ETS Model 2" = "green",
+    "SARIMAX" = "blue",
+    "ARIMA" = "red"
+  )) +
+  scale_linetype_manual(values = c(
+    "ETS Model 2" = "solid",
+    "SARIMAX" = "dotdash",
+    "ARIMA" = "twodash"
+  ))
+```
+
+
+```{r}
+# built linear regression model
+# create Lag Features
+generate_lags <- function(data, lags = 1:7) {
+  for (lag in lags) {
+    data[[paste0("lag_", lag)]] <- dplyr::lag(data$log_price, lag)
+  }
+  return(data)
+}
+cocoa_data_lagged <- generate_lags(cocoa_data) %>% drop_na()
+lm_data <- cocoa_data_lagged %>% select(YearMonth, log_price, starts_with("lag_"), PRCP, TAVG, TMAX, TMIN)
+train_size <- floor(0.7 * nrow(lm_data))
+train_lm <- lm_data[1:train_size, ]
+test_lm <- lm_data[(train_size + 1):nrow(lm_data), ]
+
+lm_model <- lm(log_price ~ ., data = train_lm %>% select(-YearMonth))
+lm_pred_log <- predict(lm_model, newdata = test_lm) # forecasting values on a log base
+lm_pred_price <- exp(lm_pred_log) # back-transform forecasted values
+lm_results <- tibble(Date = test_lm$YearMonth, Actual = exp(test_lm$log_price),Predicted = lm_pred_price)
+# plot model
+ggplot(lm_results, aes(x = Date)) +
+  geom_line(aes(y = Actual), color = "red") +
+  geom_line(aes(y = Predicted), color = "blue") +
+  labs(title = "Linear Regression Forecast vs Actual Prices (Monthly)", y = "Price", x = "Date") +
+  theme_minimal()
+```
+```{r}
+acf(residuals(lm_model))
+library(lmtest)
+dwtest(lm_model) #p-value > 0.05 good -> no autocorrelation
+```
+
+
+```{r}
+# built GARCH model
+log_returns <- diff(log(cocoa_data$Price))
+log_returns <- na.omit(log_returns)
+train_size <- floor(0.7 * length(log_returns))
+train_returns <- log_returns[1:train_size]
+test_returns <- log_returns[(train_size + 1):length(log_returns)]
+test_dates <- cocoa_data$YearMonth[(train_size + 2):(length(log_returns) + 1)]
+garch_spec <- ugarchspec(
+  variance.model = list(model = "sGARCH", garchOrder = c(1, 1)),
+  mean.model = list(armaOrder = c(1, 0), include.mean = TRUE),
+  distribution.model = "norm"
+)
+garch_fit <- ugarchfit(spec = garch_spec, data = train_returns)
+garch_forecast <- ugarchforecast(garch_fit, n.ahead = length(test_returns))
+predicted_returns <- as.numeric(fitted(garch_forecast))
+last_train_price <- cocoa_data$Price[train_size + 1]
+forecast_prices <- last_train_price * exp(cumsum(predicted_returns)) # # back-transform forecasted values
+garch_df <- tibble(Date = test_dates,Price = forecast_prices)
+
+# plot GARCH Forecast
+ggplot() +
+  geom_line(data = cocoa_data, aes(x = YearMonth, y = Price), color = "black") +
+  geom_line(data = garch_df, aes(x = Date, y = Price), color = "red") +
+  labs(title = "GARCH Forecast vs Actual Prices (Monthly)", y = "Price", x = "Date") +
+  theme_minimal()
+```
+
+```{r}
+residuals_std <- residuals(garch_fit, standardize = TRUE)
+acf(residuals_std, main = "ACF of Standardized Residuals")
+Box.test(residuals_std, lag = 20, type = "Ljung-Box") #p-value>0.05 is good -> residuals are noncorrelated
+qqnorm(residuals_std)
+qqline(residuals_std, col = "red")
+```
+
+
+
+
