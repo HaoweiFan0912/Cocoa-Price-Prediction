@@ -1,0 +1,73 @@
+# Methodology
+
+Before building the models, we reviewed existing research and found weather conditions (such as rainfall and temperature) significantly influence cocoa price fluctuations. Based on this, we selected two main datasets. The first includes historical cocoa prices over time. The second dataset contains weather data for the same period, including rainfall, average temperature, maximum temperature, and minimum temperature. 
+
+Before modeling, we preprocessed the raw data. Since daily data tends to be highly volatile and our focus is on long-term trends and seasonal patterns, we aggregated the daily data by month. For each month, we calculated the average cocoa price, average temperature, average maximum temperature, and average minimum temperature to represent that month. When calculating monthly averages, we ignored individual missing days. If an entire month was missing, we filled in the values using the average of the previous and following months. After, we aligned the price and weather data to ensure the timestamps matched exactly. Finally, we split the dataset into a training set and a testing set using a 7:3 ratio.
+
+## Time Series Models
+
+In the early stage of modeling, we tested some time series models to capture the trend and seasonal patterns in cocoa prices. These models included ETS, ARIMA, SARIMA, and SARIMA-GARCH. To meet the stationarity requirement of time series models, we applied a log transformation and first-order differencing to the price data.
+
+### ETS Models
+
+To build the ETS model, we first plotted the time series of cocoa prices to examine long-term trends and seasonal patterns. For trend analysis, if the data showed a linear increase or decrease, we used an additive trend. If the trend appeared exponential—where higher price levels were linked to larger changes—we used a multiplicative trend.
+
+Similarly, for seasonality, if seasonal fluctuations were roughly constant each year, we used an additive seasonal structure. If the size of seasonal changes grew or shrank with the price level, we used a multiplicative structure. However, certain components—such as the error term or unclear seasonal patterns—were hard to classify visually. For these cases, we used automated model selection to fit multiple ETS models and compared their corrected Akaike Information Criterion (AICc) values. We selected the model with the lowest AICc as the final ETS to balance model complexity and goodness of fit.
+
+### ARIMA and SARIMA Models
+
+For the ARIMA and SARIMA models, we set the differencing parameter d=0 because the data had already been transformed to achieve stationarity. We then plotted the autocorrelation function (ACF) and partial autocorrelation function (PACF) of the differenced series to examine the cutoff or tailing patterns of lags. This helped us make an initial judgment about the non-seasonal orders p and q, as well as the seasonal orders P and Q. For example, if the ACF drops sharply after a certain lag while the PACF tails off, it may suggest a strong moving average (MA) component and a weak autoregressive (AR) component, and vice versa.
+
+When the ACF or PACF plots showed clear patterns, we used them to determine the non-seasonal order (p, d, q) and seasonal order (P, D, Q, s), then built the corresponding ARIMA or SARIMA models. However, in practice, the ACF and PACF of the price series often lacked clear cutoffs, and the decay of lags was vague, making it hard to identify optimal orders visually.
+
+To address this, we used a grid search to fit models across a range of parameter combinations. We evaluated each model using the AICc and selected the model with the lowest AICc as the final ARIMA and SARIMA model, ensuring the best fit in the presence of structural complexity.
+
+In order to improve model sensitivity to real-world factors, we included weather data as exogenous variables in the modeling process. These monthly variables, such as average temperature and precipitation, were aligned with the price data.
+
+### SARIMA-GARCH Model
+
+ARIMA and SARIMA models assume constant variance in their error terms. This assumption can lead to large prediction errors when the time series shows clear signs of conditional heteroskedasticity. To better capture potential volatility dynamics in the price series, we extended our analysis by building a SARIMA-GARCH model. This approach incorporates volatility modeling into the framework to improve stability and predictive performance. For the GARCH component, we used the commonly applied GARCH(1,1) specification.
+
+## General Multiple Linear Regression Model
+
+In addition to time series models, we also used a general multiple linear regression model based on weather variables to explore how weather affects cocoa prices from a different perspective. Since weather may influence prices with a time lag, we included lagged weather variables as predictors.
+
+This approach helps capture delayed effects of weather on future prices and improves the model’s ability to respond to time dynamics. It also supports the assumption of independent error terms in linear regression by reducing the risk of autocorrelation.
+
+To address the missing values created by lagged variables, we removed any records with incomplete data to ensure the regression was estimated using a full and valid sample. We also applied a log transformation to the cocoa price data. This reduced volatility, improved stability, and helped meet the normality and linearity assumptions of the model. As a result, the regression modeled the log of the expected price, log(E(Y|X)), rather than the raw expected price.
+
+## Gradient Boosting Decision Tree Model
+
+Building on the previous linear regression methods, we introduced a gradient boosting decision tree model to capture more complex, nonlinear relationships behind price fluctuations. This model combines multiple lagged values of historical prices as key time series features with weather variables—including precipitation, average temperature, maximum temperature, and minimum temperature—that are closely linked to price changes. 
+
+As with the linear model, we applied a log transformation to the price data to improve model stability and better align with the distribution of prediction errors. 
+
+During feature engineering, we created multiple lagged variables and aligned all weather features to ensure consistency. After preprocessing, we tuned the model by adjusting tree depth, learning rate, and the subsampling ratios for features and samples. 
+
+## Model Selection and Validation
+
+### Model Selection Criteria
+
+After fitting the models, we carried out evaluation and diagnostic analysis to assess both the fit on the training set and the generalization performance on the test set. For model selection, we used the AICc as the primary indicator. AICc balances model fit with complexity, helping to prevent overfitting. A lower AICc value indicates a better balance between complexity and fit, so we prioritized models with the lowest AICc scores.
+
+For residual diagnostics, we examined whether the residuals met the white noise assumption. We plotted standardized residuals to check for randomness and to identify any signs of trend or structural bias. We also plotted the residual autocorrelation function (ACF) to see whether it cut off quickly after a small number of lags. Ideally, if the ACF shows no significant autocorrelation beyond lag 2, the model has likely captured most of the systematic information in the data.
+
+We further conducted the Ljung-Box test. A p-value above the common threshold of 0.05 means we cannot reject the null hypothesis that the residuals are white noise, supporting the model’s validity.
+
+For the linear regression model, we used a Q-Q plot to visually check if the residuals followed a normal distribution. We also calculated the variance inflation factor (VIF) for each predictor to assess multicollinearity. A VIF above 10 suggests a potential collinearity issue that may require variable removal or transformation. VIF values consistently below 5 indicate that the model has a stable variable structure.
+
+### Prediction and Back-Transformation
+
+After evaluating the models on the training set, we tested their predictive performance on the test set. It is important to note that different models applied different transformations to the cocoa price data during training. Therefore, we reversed these transformations before evaluation to ensure comparability of the results.
+
+For the linear regression and XGBoost models, which were trained on the log-transformed prices, we applied an exponential transformation to the predictions to recover the actual price levels.
+
+In contrast, the time series models—ETS, ARIMA, SARIMA, and SARIMA-GARCH—used both log transformation and first-order differencing to achieve stationarity. For these models, we first reconstructed the original log price series by cumulatively summing the differenced predictions. We then applied the exponential transformation to obtain the predicted actual prices.
+
+### Evaluation Metrics and Final Model Selection
+
+We evaluated model performance by using the optimal parameters estimated from the training set to predict cocoa prices in the test set. We then calculated several standardized prediction error metrics to assess accuracy: Mean Absolute Error (MAE), Root Mean Squared Error (RMSE), Mean Absolute Percentage Error (MAPE), and Sum of Squared Errors (SSE).
+
+MAE measures the average absolute difference between predicted and actual values; lower values indicate better overall accuracy. RMSE gives more weight to larger errors, so a lower RMSE suggests the model performs well in avoiding large deviations. MAPE expresses prediction error as a percentage of the actual values, allowing for comparison across models and scales; lower values reflect smaller relative errors. SSE is the total of squared residuals and captures the model’s overall error; smaller values are preferred.
+
+To avoid relying on a single metric, we compared all four indicators and paid particular attention to MAE and RMSE. Among the candidate models, we selected the one that showed consistent performance and relatively low errors across multiple metrics as the final prediction model. This model not only fit the training data well but also demonstrated strong and stable predictive accuracy on unseen data.
