@@ -1,0 +1,556 @@
+---
+title: "STA457 Final Project"
+author: "Wenyi Li"
+date: "2025-03-30"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r}
+# load required libraries
+library(tidyverse)
+library(lubridate)
+library(forecast)
+library(tseries)
+library(ggplot2)
+library(xgboost)
+library(caret)
+library(slider)
+library(rugarch)
+library(car)
+```
+
+# Data Preprocessing
+```{r}
+# load and preprocess price data
+cocoa_prices <- read.csv("Daily Prices_ICCO.csv", stringsAsFactors = FALSE)
+cocoa_prices$Date <- as.Date(cocoa_prices$Date, format='%d/%m/%Y')
+cocoa_prices$Price <- as.numeric(gsub(",", "", cocoa_prices$ICCO.daily.price..US..tonne.))
+cocoa_prices <- cocoa_prices %>%
+  mutate(YearMonth = floor_date(Date, "month")) %>%
+  group_by(YearMonth) %>%
+  summarise(Price = mean(Price, na.rm = TRUE)) %>%
+  ungroup()
+```
+
+```{r}
+# load and preprocess Ghana weather data
+ghana_weather <- read.csv("Ghana_data.csv", stringsAsFactors = FALSE)
+ghana_weather$DATE <- as.Date(ghana_weather$DATE)
+ghana_weather <- ghana_weather %>%
+  mutate(YearMonth = floor_date(DATE, "month")) %>%
+  group_by(YearMonth) %>%
+  summarise(across(c(PRCP, TAVG, TMAX, TMIN), mean, na.rm = TRUE))
+```
+
+```{r}
+# Merge and Clean Monthly Data(log + diff)
+cocoa_data <- left_join(cocoa_prices, ghana_weather, by = "YearMonth") %>%
+  mutate(log_price = log(Price),
+         diff_log_price = c(NA, diff(log_price))) %>%
+  drop_na()
+
+# Plot Monthly Time Series
+ggplot(cocoa_data, aes(x = YearMonth)) +
+  geom_line(aes(y = Price), color = "steelblue") +
+  labs(title = "Monthly Cocoa Prices", y = "Price", x = "Date") +
+  theme_minimal()
+```
+
+```{r}
+# Split Data into Training and Testing Sets(7:3 ratio)
+train_size <- floor(0.7 * nrow(cocoa_data))
+train_data <- cocoa_data[1:train_size, ]
+test_data <- cocoa_data[(train_size + 1):nrow(cocoa_data), ]
+```
+
+
+
+# Modeling
+```{r}
+# since not station, already transformed in the pre-processed part(log + diff)
+# built ets models
+ets_model_1 <- ets(train_data$diff_log_price, model = "ZZZ")
+ets_model_2 <- ets(train_data$diff_log_price)
+plot(ts(fitted(ets_model_2)), col = "red", 
+     main = "Actual vs Predicted for diff-log price ets") + 
+  lines(ts(train_data$diff_log_price), col = "green")
+# ets_model_2(ets_model_1) was selected as a candidate
+```
+
+```{r}
+# built arima, sarima models
+# verify stationarity(1st diff + log)
+ggplot(train_data, aes(x = YearMonth)) +
+  geom_line(aes(y = diff_log_price), color = "steelblue") +
+  labs(title = "Monthly Cocoa Prices", y = "Price", x = "Date") +
+  theme_minimal()
+acf(train_data$diff_log_price, main = "ACF of differencing log price")
+pacf(train_data$diff_log_price, main = "PACF of differencing log price")
+external_regressors <- data.matrix(train_data[, c("PRCP", "TAVG", "TMAX", "TMIN")])
+arima_model1 <- arima(train_data$diff_log_price, order = c(2,0,2), xreg = external_regressors)
+arima_model2 <- arima(train_data$diff_log_price, order = c(2,0,5), xreg = external_regressors)
+sarimax_model <- auto.arima(train_data$diff_log_price, xreg = as.matrix(external_regressors), seasonal = TRUE)
+summary(arima_model1)
+summary(arima_model2)
+# arima_model1, sarimax_model was selected as a candidate, seasonality not detected(sarimaxmodel same as arimamodel1)
+plot(ts(fitted(arima_model1)), col = "red", main = "Actual vs Predicted for diff-log price arima") + lines(ts(train_data$diff_log_price), col = "green")
+plot(ts(fitted(sarimax_model)), col = "red", main = "Actual vs Predicted for diff-log price sarimax") + lines(ts(train_data$diff_log_price), col = "green")
+```
+
+```{r}
+# residual diagnostic for arima, sarima models
+tsdiag(arima_model1, gof.lag = 20)
+tsdiag(arima_model2, gof.lag = 20)
+tsdiag(sarimax_model, gof.lag = 20)
+```
+
+```{r}
+# forecasting in diff-log base
+test_xreg <- data.matrix(test_data[, c("PRCP", "TAVG", "TMAX", "TMIN")])
+test_xreg <- as.matrix(test_xreg)
+ets_forecast_2 <- forecast(ets_model_2, h = nrow(test_data))
+sarimax_forecast <- forecast(sarimax_model, xreg = test_xreg, h = nrow(test_data))
+h <- nrow(test_data)
+pred1 <- predict(arima_model1, n.ahead = h, newxreg = test_xreg)
+```
+
+```{r}
+# back-transform forecasted values
+reconstruct_log_prices <- function(last_log_price, diffs) {cumsum(c(last_log_price, diffs))[-1]}
+
+last_log_price <- tail(train_data$log_price, 1)
+n <- nrow(test_data)
+forecast_dates <- test_data$YearMonth
+
+ets2_log_forecast <- reconstruct_log_prices(last_log_price, ets_forecast_2$mean)
+sarimax_log_forecast <- reconstruct_log_prices(last_log_price, sarimax_forecast$mean)
+arima_log_forecast <- reconstruct_log_prices(last_log_price, pred1$pred)
+
+ets2_price_forecast <- exp(ets2_log_forecast)
+ets2_price_forecast
+sarimax_price_forecast <- exp(sarimax_log_forecast)
+sarimax_price_forecast
+arima_price_forecast <- exp(arima_log_forecast)
+arima_price_forecast
+
+forecast_df <- bind_rows(
+  tibble(Date = forecast_dates, Forecast = ets2_price_forecast, Model = "ETS Model 2"),
+  tibble(Date = forecast_dates, Forecast = sarimax_price_forecast, Model = "SARIMAX"),
+  tibble(Date = forecast_dates, Forecast = arima_price_forecast, Model = "ARIMA")
+) %>% drop_na()
+
+forecast_df
+#forecast_df is a knitted back-transformed forecasted values for three models
+
+ggplot() +
+  geom_line(data = cocoa_data, aes(x = YearMonth, y = Price), color = "black", linewidth = 1.3) +
+  geom_line(data = forecast_df, aes(x = Date, y = Forecast, color = Model, linetype = Model), linewidth = 1.3) +
+  labs(title = "Monthly Predicted of Three Models vs Actual Cocoa Prices", y = "Price", x = "Date") +
+  theme_minimal() +
+  theme(legend.position = "bottom") +
+  scale_color_manual(values = c(
+    "ETS Model 2" = "green",
+    "SARIMAX" = "blue",
+    "ARIMA" = "red"
+  )) + 
+  scale_linetype_manual(values = c(
+    "ETS Model 2" = "solid",
+    "SARIMAX" = "dotdash",
+    "ARIMA" = "twodash"
+  ))
+
+# acc comparison
+actual_prices <- exp(test_data$log_price)
+ets2_acc <- accuracy(ets2_price_forecast, actual_prices)
+sarimax_acc <- accuracy(sarimax_price_forecast, actual_prices)
+arima_acc <- accuracy(arima_price_forecast, actual_prices)
+
+print("ETS Model Performance:")
+print(ets2_acc)
+print("ARIMAX Model Performance:")
+print(arima_acc)
+print("SARIMAX Model Performance:")
+print(sarimax_acc)
+```
+
+
+```{r}
+# built linear regression model
+# create Lag Features
+generate_lags <- function(data, lags = 1:6) {
+  for (lag in lags) {
+    data[[paste0("lag_", lag)]] <- dplyr::lag(data$log_price, lag)
+  }
+  return(data)
+}
+cocoa_data_lagged <- generate_lags(cocoa_data) %>% drop_na()
+lm_data <- cocoa_data_lagged %>%
+  select(YearMonth, log_price, starts_with("lag_"), PRCP, TAVG, TMAX, TMIN)
+train_size <- floor(0.7 * nrow(lm_data))
+train_lm <- lm_data[1:train_size, ]
+test_lm <- lm_data[(train_size + 1):nrow(lm_data), ]
+lm_model <- lm(log_price ~ ., data = train_lm %>% select(-YearMonth))
+plot(ts(fitted(lm_model)), col = "red", 
+     main = "Actual vs Predicted for log price regression") + 
+  lines(ts(train_data$log_price), col = "green")
+
+lm_pred_log <- predict(lm_model, newdata = test_lm)
+lm_pred_price <- exp(lm_pred_log)
+lm_results <- tibble(
+  Date = test_lm$YearMonth,
+  Actual = exp(test_lm$log_price),
+  Predicted = lm_pred_price
+)
+### Plot Regression Results
+ggplot(lm_results, aes(x = Date)) +
+  geom_line(aes(y = Actual), color = "red") +
+  geom_line(aes(y = Predicted), color = "blue") +
+  labs(title = "Linear Regression Predicted vs Actual Prices (Monthly)", y = "Price", x = "Date") +
+  theme_minimal()
+
+lm_accuracy <- accuracy(lm_pred_price, exp(test_lm$log_price))
+print("Linear Regression Model Performance:")
+print(lm_accuracy)
+```
+
+```{r}
+acf(residuals(lm_model), main = "ACF of Residuals regression")
+library(lmtest)
+dwtest(lm_model) #p-value > 0.05 good -> no autocorrelation
+qqnorm(residuals(lm_model), main = "QQ-Plot of regression residuals")
+qqline(residuals(lm_model), col = "red", lwd = 2)
+vif(lm_model)
+Box.test(residuals(lm_model), lag = 20, type = "Ljung-Box")
+```
+
+```{r}
+# Calculate log returns
+log_re <- diff(log(cocoa_data$Price))
+log_re <- na.omit(log_re)
+train_size <- floor(0.7 * length(log_re))
+train_re <- log_re[1:train_size]
+test_re <- log_re[(train_size + 1):length(log_re)]
+test_dates <- cocoa_data$YearMonth[(train_size + 2):(length(log_re) + 1)]
+# define garch model - using our best arma model p,q with 2,2 and widely used garchorder 1,1
+garch_spec <- ugarchspec(
+  variance.model = list(model = "sGARCH", garchOrder = c(1, 1)),
+  mean.model = list(armaOrder = c(2, 2), include.mean = TRUE),
+  distribution.model = "norm"
+)
+garch_fit <- ugarchfit(spec = garch_spec, data = train_re)
+garch_forecast <- ugarchforecast(garch_fit, n.ahead = length(test_re))
+predicted_re <- as.numeric(fitted(garch_forecast))
+plot(ts(fitted(garch_fit)), col = "red", 
+     main = "Actual vs Predicted for diff-log price garch") +
+  lines(ts(train_data$diff_log_price), col = "green")
+
+# back-transform
+last_train_price <- cocoa_data$Price[train_size + 1]
+forecast_prices <- last_train_price * exp(cumsum(predicted_re))
+
+garch_df <- tibble(
+  Date = test_dates,
+  Price = forecast_prices
+)
+# plot the model
+ggplot() +
+  geom_line(data = cocoa_data, aes(x = YearMonth, y = Price), color = "black") +
+  geom_line(data = garch_df, aes(x = Date, y = Price), color = "pink") +
+  labs(title = "GARCH Predicted vs Actual Prices (Monthly)", y = "Price", x = "Date") +
+  theme_minimal()
+
+garch_accuracy <- accuracy(forecast_prices, exp(test_data$log_price))
+
+print("GARCH Model Performance:")
+print(garch_accuracy)
+```
+```{r}
+residuals_std <- residuals(garch_fit, standardize = TRUE)
+acf(residuals_std, main = "ACF of Residuals garch")
+Box.test(residuals_std, lag = 20, type = "Ljung-Box")
+
+qqnorm(residuals_std, main = "QQ-Plot of ARMA-GARCH")
+qqline(residuals_std, col = "red", lwd = 2)
+```
+
+```{r}
+# built xgboost model
+# generate lags
+generate_lags <- function(data, lags = 1:6) {
+  for (lag in lags) {
+    data[[paste0("lag_", lag)]] <- dplyr::lag(data$log_price, lag)
+  }
+  return(data)
+}
+
+cocoa_data_lagged <- cocoa_data %>%
+  generate_lags() %>%
+  drop_na()
+
+initial_size <- floor(0.7 * nrow(cocoa_data_lagged))
+forecast_horizon <- nrow(cocoa_data_lagged) - initial_size
+
+
+walk_results <- map_dfr(1:forecast_horizon, function(i) {
+  train_set <- cocoa_data_lagged[1:(initial_size + i - 1), ]
+  test_point <- cocoa_data_lagged[(initial_size + i), ]
+
+  x_train <- train_set %>% select(starts_with("lag_"), PRCP, TAVG, TMAX, TMIN)
+  y_train <- train_set$log_price
+  x_test <- test_point %>% select(starts_with("lag_"), PRCP, TAVG, TMAX, TMIN)
+
+  dtrain <- xgb.DMatrix(as.matrix(x_train), label = y_train)
+  dtest <- xgb.DMatrix(as.matrix(x_test))
+# fit model
+  model <- xgboost(
+    data = dtrain,
+    nrounds = 600,
+    objective = "reg:squarederror",
+    verbose = 0,
+    eta = 0.05
+  )
+
+  pred_log <- predict(model, dtest)
+  tibble(
+    Date = test_point$YearMonth,
+    Actual = exp(test_point$log_price),
+    Predicted = exp(pred_log)
+  )
+})
+
+
+ggplot(walk_results, aes(x = Date)) +
+  geom_line(aes(y = Actual), color = "black", linewidth = 1) +
+  geom_line(aes(y = Predicted), color = "purple", linewidth = 1) +
+  labs(title = "XGBoost Walk-Forward Forecast vs Actual (Monthly)",
+       y = "Price", x = "Date") +
+  theme_minimal()
+
+xgb_accuracy <- accuracy(walk_results$Predicted, walk_results$Actual)
+print("XGBoost Walk-Forward Accuracy Metrics:")
+print(xgb_accuracy)
+```
+
+```{r}
+# residual analysis of xgboost model
+walk_results <- walk_results %>%
+  filter(!is.na(Actual), !is.na(Predicted)) %>%
+  mutate(Residual = Actual - Predicted)
+acf(walk_results$Residual, main = "ACF of Residuals xgboost")
+Box.test(walk_results$Residual, lag = 20, type = "Ljung-Box")
+
+x_train_full <- cocoa_data_lagged %>% select(starts_with("lag_"), PRCP, TAVG, TMAX, TMIN)
+y_train_full <- cocoa_data_lagged$log_price
+dtrain_full <- xgb.DMatrix(as.matrix(x_train_full), label = y_train_full)
+
+final_model <- xgboost(
+  data = dtrain_full,
+  nrounds = 600,
+  objective = "reg:squarederror",
+  eta = 0.05,
+  verbose = 0
+)
+```
+
+
+
+```{r}
+h_future <- 120
+ets_forecast_future <- forecast(ets_model_2, h = h_future)
+
+last_log_price <- tail(train_data$log_price, 1)
+ets_log_future <- reconstruct_log_prices(last_log_price, ets_forecast_future$mean)
+
+# backtransform
+ets_price_future <- exp(ets_log_future)
+
+future_dates <- seq.Date(from = max(cocoa_data$YearMonth) + months(1),
+                         by = "month", length.out = h_future)
+
+ets_forecast_df_10yr <- tibble(
+  Date = future_dates,
+  Forecast = ets_price_future,
+  Model = "ETS Model 2"
+)
+
+ggplot() +
+  geom_line(data = cocoa_data, aes(x = YearMonth, y = Price), color = "black", linewidth = 1.2) +
+  geom_line(data = ets_forecast_df_10yr, aes(x = Date, y = Forecast, color = Model, linetype = Model), linewidth = 1.2) +
+  labs(title = "10-Year Forecast of Cocoa Prices by ETS Model",
+       x = "Date", y = "Price") +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+```
+
+```{r}
+# calculate historical averages from training data
+avg_PRCP  <- mean(train_data$PRCP, na.rm = TRUE)
+avg_TAVG  <- mean(train_data$TAVG, na.rm = TRUE)
+avg_TMAX  <- mean(train_data$TMAX, na.rm = TRUE)
+avg_TMIN  <- mean(train_data$TMIN, na.rm = TRUE)
+
+future_xreg <- matrix(rep(c(avg_PRCP, avg_TAVG, avg_TMAX, avg_TMIN),
+                          each = h_future), nrow = h_future)
+
+arima_future <- predict(arima_model1, n.ahead = h_future, newxreg = future_xreg)
+
+# back-transform
+arima_log_future <- reconstruct_log_prices(last_log_price, arima_future$pred)
+arima_price_future <- exp(arima_log_future)
+
+arima_forecast_df_10yr <- tibble(
+  Date = future_dates,
+  Forecast = arima_price_future,
+  Model = "ARIMA"
+)
+
+ggplot() +
+  geom_line(data = cocoa_data, aes(x = YearMonth, y = Price), color = "black", linewidth = 1.2) +
+  geom_line(data = arima_forecast_df_10yr, aes(x = Date, y = Forecast, color = Model, linetype = Model), linewidth = 1.2) +
+  labs(title = "10-Year Forecast of Cocoa Prices by ARIMA Model",
+       x = "Date", y = "Price") +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+```
+
+```{r}
+future_lm_preds <- numeric(h_future)
+
+current_lags <- tail(lm_data$log_price, 6)
+
+for(i in 1:h_future) {
+  newdata <- as.data.frame(t(c(current_lags, avg_PRCP, avg_TAVG, avg_TMAX, avg_TMIN)))
+  colnames(newdata) <- c(paste0("lag_", 1:6), "PRCP", "TAVG", "TMAX", "TMIN")
+  pred_log <- predict(lm_model, newdata = newdata)
+  future_lm_preds[i] <- pred_log
+  
+  current_lags <- c(pred_log, current_lags[1:5])
+}
+
+lm_price_future <- exp(future_lm_preds)
+
+lm_forecast_df_10yr <- tibble(
+  Date = future_dates,
+  Forecast = lm_price_future,
+  Model = "Linear Regression"
+)
+
+ggplot() +
+  geom_line(data = cocoa_data, aes(x = YearMonth, y = Price), color = "black", linewidth = 1.2) +
+  geom_line(data = lm_forecast_df_10yr, aes(x = Date, y = Forecast, color = Model, linetype = Model), linewidth = 1.2) +
+  labs(title = "10-Year Forecast of Cocoa Prices by Linear Regression Model",
+       x = "Date", y = "Price") +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+
+write.csv(lm_forecast_df_10yr, "output_file.csv", row.names = FALSE)
+```
+
+```{r}
+garch_forecast_10yr <- ugarchforecast(garch_fit, n.ahead = 120)
+predicted_10yr_returns <- as.numeric(fitted(garch_forecast_10yr))
+
+last_price <- tail(cocoa_data$Price, 1)
+future_garch_prices <- last_price * exp(cumsum(predicted_10yr_returns))
+
+garch_forecast_df_10yr <- tibble(
+  Date = future_dates,
+  Forecast = future_garch_prices,
+  Model = "GARCH"
+)
+
+ggplot() +
+  geom_line(data = cocoa_data, aes(x = YearMonth, y = Price), color = "black", linewidth = 1.2) +
+  geom_line(data = garch_forecast_df_10yr, aes(x = Date, y = Forecast, color = Model, linetype = Model), linewidth = 1.2) +
+  labs(title = "10-Year Forecast of Cocoa Prices by ARMA-GARCH Model",
+       x = "Date", y = "Price") +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+```
+
+```{r}
+h_future <- 120
+future_xgb_preds <- numeric(h_future)
+
+# Get last 6 log prices (for lag_1 to lag_6)
+current_lags <- as.numeric(tail(cocoa_data_lagged$log_price, 6))
+
+# Average weather values (for fixed future input)
+avg_PRCP <- mean(cocoa_data_lagged$PRCP, na.rm = TRUE)
+avg_TAVG <- mean(cocoa_data_lagged$TAVG, na.rm = TRUE)
+avg_TMAX <- mean(cocoa_data_lagged$TMAX, na.rm = TRUE)
+avg_TMIN <- mean(cocoa_data_lagged$TMIN, na.rm = TRUE)
+
+# Forecast loop
+for (i in 1:h_future) {
+  # Construct input as data frame
+  newdata <- as.data.frame(t(c(current_lags, avg_PRCP, avg_TAVG, avg_TMAX, avg_TMIN)))
+  colnames(newdata) <- c(paste0("lag_", 1:6), "PRCP", "TAVG", "TMAX", "TMIN")
+
+  # Convert to matrix, then to DMatrix
+  newdata_matrix <- as.matrix(newdata)
+  dnew <- xgb.DMatrix(newdata_matrix)
+
+  # Predict log price
+  pred_log <- predict(final_model, dnew)
+
+  # Save prediction
+  future_xgb_preds[i] <- pred_log
+
+  # Update lags
+  current_lags <- c(pred_log, current_lags[1:5])
+}
+
+# Convert log-price to price
+xgb_price_future <- exp(future_xgb_preds)
+
+# Generate future dates
+library(lubridate)
+last_date <- max(cocoa_data_lagged$YearMonth)
+future_dates <- seq.Date(from = last_date %m+% months(1), by = "month", length.out = h_future)
+
+# Final forecast data frame
+xgb_forecast_df_10yr <- tibble(
+  Date = future_dates,
+  Forecast = xgb_price_future,
+  Model = "XGBoost"
+)
+
+# Plot
+ggplot() +
+  geom_line(data = cocoa_data, aes(x = YearMonth, y = Price), color = "black", linewidth = 1.2) +
+  geom_line(data = xgb_forecast_df_10yr, aes(x = Date, y = Forecast, color = Model), linewidth = 1.2) +
+  labs(title = "10-Year Forecast of Cocoa Prices (XGBoost)",
+       x = "Date", y = "Price") +
+  theme_minimal()
+```
+```{r}
+# Combine all forecast data frames
+all_forecasts_10yr <- bind_rows(
+  ets_forecast_df_10yr,
+  arima_forecast_df_10yr,
+  lm_forecast_df_10yr,
+  garch_forecast_df_10yr,
+  xgb_forecast_df_10yr
+)
+
+# Plot the forecasts alongside historical prices
+ggplot() +
+  geom_line(data = cocoa_data, aes(x = YearMonth, y = Price), color = "black", linewidth = 1.2) +
+  geom_line(data = all_forecasts_10yr, aes(x = Date, y = Forecast, color = Model, linetype = Model), linewidth = 1.2) +
+  labs(title = "10-Year Forecast of Cocoa Prices by Model",
+       x = "Date", y = "Price") +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+```
+
