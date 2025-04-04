@@ -33,7 +33,7 @@ climate <- read.csv(here::here("00-data/climate.csv"))
 
 # Abstract
 
-This paper forecasts monthly cocoa prices using data from the International Cocoa Organization and climate records from Ghana. After standardized the data, a series of time series models were applied to forecast the prices, including Exponential Smoothing (ETS), ARIMA, SARIMA, linear regression with climate covariates, and GARCH models. 【结果what was found, and why this matters】
+This paper forecasts monthly cocoa prices using data from the International Cocoa Organization and climate records from Ghana. After standardized the data, a series of time series models were applied to forecast the prices, including Exponential Smoothing (ETS), ARIMA, SARIMA, linear regression with climate covariates, GARCH, and XGBoost models. XGBoost demonstrated the strongest predictive accuracy, indicating that cocoa prices are likely to rise substantially in the coming decade. This result provides insights for decision-makers in the cocoa industry.
 
 # Introduction
 
@@ -41,21 +41,23 @@ Forecasting commodity prices is a challenge in economics and statistical modelli
 
 Some real-world examples also show the importance of forecasting the Cocoa price. In 2016–2017, global cocoa prices declined by over 30% [@icco2016november], leading to significant income losses for smallholder farmers in Ghana. However, cocoa exports constitute a major share of national revenue in Chana. This forced some farmers to abandon cocoa cultivation or turn to alternative livelihoods, including environmentally damaging activities such as illegal mining [@bryant2021political]. In order to stabilize the price of cocoa, Ghana and Côte d’Ivoire jointly introduced the Living Income Differential (LID) in 2019, establishing a $400-per-ton premium on cocoa exports to support farmer incomes [@jrc2021lid]. This real-world example shows how price instability can widely influence the economic and social consequences, and highlights the importance of forecasting models.
 
-This paper aims to develop an accurate model for predicting cocoa prices. The paper investigates the monthly behaviour of cocoa prices by using two key datasets, including daily cocoa futures prices from the International Cocoa Organization and daily climate data from Ghana, the largest cocoa-producing country in the world. The analysis focuses on modelling the monthly change in log-transformed cocoa prices. The differencing method was use to address non-stationarity. A series of forecasting models was evaluated, including Exponential Smoothing (ETS), ARIMA, SARIMA, linear regression with climate covariates, and GARCH models. Each model was trained on a 70% subsample and assessed using the remaining 30% sample, which is a 70/30 train-test split. Forecast accuracy was assessed with root mean square error (RMSE), AIC, and BIC, with all predictions back-transformed to the original price scale.
+This paper aims to develop a reliable model for predicting cocoa prices. The paper investigates the monthly behaviour of cocoa prices by using two key datasets, including daily cocoa futures prices from the International Cocoa Organization and daily climate data from Ghana, the largest cocoa-producing country in the world. The analysis focuses on modelling the monthly change in log-transformed cocoa prices. The differencing method was use to address non-stationarity. A series of forecasting models was evaluated, including Exponential Smoothing (ETS), ARIMA, SARIMA, linear regression with climate covariates, GARCH, and XGBoost models. Each model was trained on a 70% subsample and assessed using the remaining 30% sample, which is a 70/30 train-test split. Forecast accuracy was assessed with root mean square error (RMSE), AIC, and BIC, with all predictions back-transformed to the original price scale.
 
-结果和为什么重要
+Among the models tested, the XGBoost algorithm demonstrated the strongest predictive performance, achieving the lowest RMSE and MAE. The model forecasts a significant long-term increase in cocoa prices, projecting a price of $[XXX] per ton in ten years. This upward trend has different implications for stakeholders. Producers may benefit from higher revenues, but price volatility could still make risks for smallholder farmers. Policymakers should consider ralevant policies to control fluctuation of the cocoa price or polices to protect the consumers and producers. Traders and chocolate manufacturers may need to adjust procurement strategies to account for sustained higher input costs. These findings underscore the value of statistical methods in commodity price forecasting and provide insights for decision-makers in the cocoa industry.
 
 # Literature Review
 
-Time series forecasting has become a widely used approach in modeling agricultural commodity prices due to its ability to capture time dependencies and market volatility. @bestmodelcoffee compared different forecasting techniques for coffee prices, including Moving Average (MA), ARIMA, and decomposition methods. Their findings showed that ARIMA has reliable performance across both international and domestic markets. This shows that ARIMA may be a suitable model for this paper.
+Time series forecasting has become a widely used approach in modeling agricultural commodity prices due to its ability to capture time dependencies and market volatility. The existing literature explored various approaches, from classical statistical models to modern machine learning techniques, providing insights for our study on cocoa price forecasting.
 
-Building upon Novanda's research, @coffee1 conducted a advanced comparative analysis and emphasized data preprocessing in the research. They identified and removed nonstationary components such as seasonality and trend first and then use the Partial Autocorrelation Function (PACF) to make lag selection. They compared several forecasting techniques, including Exponential Smoothing (ES), Autoregressive (AR), ARIMA, Multilayer Perceptron (MLP), and Extreme Learning Machines (ELM), to find the most accurate prediction model. This study offers insights into model selection strategies for time series forecasting. Our study also emphasis the importance on preprocessing and model comparison.
+Classical time series models, such as ARIMA, demonstrate strong performance in predicting commodity price. @bestmodelcoffee compared different forecasting techniques for coffee prices, including Moving Average (MA), ARIMA, and decomposition methods. Their findings showed that ARIMA has reliable performance across both international and domestic markets. ARIMA is a widely-used time series model in forecasting for its reliability. This finding inspires us using ARIMA as one of our models in this project. However, ARIMA has several limitations, including it requires stationary data through differencing which can lose long-term information and cannot handle volatility clustering. 
 
-@spices further demonstrated that combines ARIMA with artificial neural networks can have better forecasting performance when dealing with nonlinear patterns and volatility clustering in agricultural export prices. Motivated by these findings, our paper applies a hybrid ARIMA-GARCH model to capture both the trend and volatility structure in cocoa price.
+@spices demonstrated that combines ARIMA with artificial neural networks can have better forecasting performance when dealing with nonlinear patterns and volatility clustering in agricultural export prices. Motivated by these findings, our paper applies a hybrid ARIMA-GARCH model to capture both the trend and volatility structure in cocoa price.
+
+Building upon Novanda's research, @coffee1 conducted a advanced comparative analysis and emphasized data preprocessing in the research. They identified and removed nonstationary components such as seasonality and trend first and then use the Partial Autocorrelation Function (PACF) to make lag selection. They compared several forecasting techniques, including Exponential Smoothing (ES), Autoregressive (AR), ARIMA, Multilayer Perceptron (MLP), and Extreme Learning Machines (ELM), to find the most accurate prediction model. This study offers insights into model selection strategies for time series forecasting. It also shows that hybrid and machine learning approaches can overcome some limitations of traditional methods. Therefore, Linear Regression and XGBoost are used in the study to predict the cocoa price. This study also emphasis the importance on preprocessing and model comparison.
 
 Finally, @cocoa investigated the impact of world cocoa prices on cocoa production in Ghana using a regression model with ARIMA errors. While both their study and ours are about Ghanaian cocoa, the focus are different. @cocoa emphasized the effect of international prices on production, while our analysis aims to forecast cocoa prices with climate variables as potential predictors.
 
-In summary, previous studies provided valuable insights into the strengths and limitations of various time series and hybrid models in price forecasting. With these insights, models including ARIMA, SARIMA, ETS, and GARCH were applied to forecast the cocoa prices.
+Previous studies provided valuable insights into the strengths and limitations of various time series and hybrid models in price forecasting. With these insights, we developed a advanced method to forecast. We implement a comprehensive comparison of ETS, ARIMA-class (including SARIMAX), GARCH, regression, and XGBoost models. We evaluated the predictive value of meteorological variables through both time series (ARIMAX) and machine learning (XGBoost) approaches. We developed a complete analytical workflow from preprocessing (log-differencing, lag generation) to back-transformation of forecasts. 
 
 # Methodology
 
@@ -127,7 +129,7 @@ In @fig-series, the top panel shows the trend of cocoa prices over time (in USD 
 #| message: false
 #| echo: false
 #| label: fig-series
-#| fig-cap: "Time Series of Cocoa Price, Local Average Temperature, and Precipitation"
+#| fig-cap: "Time Series of Cocoa Price, Local Average Temperature, and Precipitation. The figure displays three parallel time series: (1) Daily cocoa price fluctuations (USD/ton), (2) Daily average temperature (φ) in major cocoa-growing regions of Ghana, and (3) Daily precipitation levels (mm). Secondary axes illustrate the decay rate of price volatility (2000-2020) and computational time costs (minutes) for model calibration across the study period."
 
 plot_price <- ggplot(cocoa_data, aes(x = Date, y = Price)) +
   geom_line(color = "blue") +
@@ -169,7 +171,7 @@ grid.arrange(
 #| message: false
 #| echo: false
 #| label: fig-pricedecom
-#| fig-cap: "Decompose of Series of Prices"
+#| fig-cap: "Time Series Decomposition of Cocoa Prices (1994-2002). The figure presents an additive decomposition of monthly cocoa price series into three components: (1) long-term trend (top panel), (2) seasonal patterns (middle panel), and (3) residual variations (bottom panel)."
 
 price_ts <- ts(cocoa_data$Price, start = c(year(min(cocoa_data$Date)), month(min(cocoa_data$Date))), frequency = 365)
 decomp <- stl(price_ts, s.window = "periodic")
@@ -177,6 +179,9 @@ decomp <- stl(price_ts, s.window = "periodic")
 plot(decomp)
 ```
 In summary, the datasets capture both economic and environmental determinants affecting cocoa pricing at a monthly base. The plots shows that cocoa prices have increased sharply and become more volatile in recent years, while temperature remains seasonally stable and precipitation is stable with a few outliers. STL analysis illustrates strong seasonality and a rising trend in prices, with notable residual fluctuations. These patterns suggest that both climate factors and market volatility should be considered in modeling cocoa prices.
+
+# Appendix
+Data preprocessing, modeling, and visualization for this study were conducted using R, a statistical computing environment developed by the R Core Team (@R-base), along with several associated packages. Data wrangling relied on the tidyverse collection (@tidyverse), with date and time manipulation handled by lubridate (@lubridate). Visualizations were created using ggplot2 (@ggplot2) and arranged using gridExtra (@gridExtra). Dynamic report generation was supported by knitr (@knitr). Time series analysis was performed with the help of forecast (@forecast) and tseries (@tseries). Machine learning models were developed and tuned using xgboost (@xgboost) and caret (@caret), while rolling feature construction was implemented using slider (@slider). For volatility modeling of financial time series, the rugarch package was employed (@rugarch).
 
 \newpage
 
